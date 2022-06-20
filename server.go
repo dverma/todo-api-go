@@ -38,6 +38,10 @@ func (h *todoHandlers) restHandlers(writer http.ResponseWriter, req *http.Reques
 	case "POST":
 		h.post(writer, req)
 		return
+	case "PUT":
+		h.put(writer, req)
+	case "DELETE":
+		h.delete(writer, req)
 	default:
 		writer.WriteHeader(http.StatusMethodNotAllowed)
 		writer.Write([]byte("Method not allowed."))
@@ -53,6 +57,39 @@ func errorHandler(err error, writer http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func (h *todoHandlers) delete(writer http.ResponseWriter, req *http.Request) {
+	bodyBytes, err := ioutil.ReadAll(req.Body)
+	defer req.Body.Close()
+	errorHandler(err, writer, req)
+	var todo Todo
+	err = json.Unmarshal(bodyBytes, &todo)
+	if err != nil {
+		writer.WriteHeader(http.StatusBadRequest)
+		writer.Write([]byte(err.Error()))
+		return
+	}
+	h.Lock()
+	delete(h.store, todo.ID)
+	defer h.Unlock()
+}
+
+
+func (h *todoHandlers) put(writer http.ResponseWriter, req *http.Request) {
+	bodyBytes, err := ioutil.ReadAll(req.Body)
+	defer req.Body.Close()
+	errorHandler(err, writer, req)
+	var todo Todo
+	err = json.Unmarshal(bodyBytes, &todo)
+	if err != nil {
+		writer.WriteHeader(http.StatusBadRequest)
+		writer.Write([]byte(err.Error()))
+		return
+	}
+	h.Lock()
+	h.store[todo.ID] = todo
+	defer h.Unlock()
+}
+
 func (h *todoHandlers) post(writer http.ResponseWriter, req *http.Request) {
 	bodyBytes, err := ioutil.ReadAll(req.Body)
 	defer req.Body.Close()
@@ -65,9 +102,11 @@ func (h *todoHandlers) post(writer http.ResponseWriter, req *http.Request) {
 		writer.Write([]byte(err.Error()))
 		return
 	}
-	h.Lock()
-	h.store[todo.ID] = todo
-	defer h.Unlock()
+	if _, ok := h.store[todo.ID]; ok {
+		h.Lock()
+		h.store[todo.ID] = todo
+		defer h.Unlock()
+	}
 }
 
 func (h *todoHandlers) get(writer http.ResponseWriter, req *http.Request) {
@@ -89,7 +128,7 @@ func (h *todoHandlers) get(writer http.ResponseWriter, req *http.Request) {
 func main() {
 	todoHandlers := newTodoHandlers()
 	http.HandleFunc("/todos", todoHandlers.restHandlers)
-	err := http.ListenAndServe(":8080", nil)
+	err := http.ListenAndServe(":8081", nil)
 	if err != nil {
 		panic(err)
 	}
